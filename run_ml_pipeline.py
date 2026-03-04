@@ -35,14 +35,7 @@ import time
 
 import numpy as np
 
-
-def setup_logging(verbose: bool = False) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-        datefmt="%H:%M:%S",
-    )
+from logging_config import configure_logging, log_config_summary, log_final_summary, log_phase
 
 
 def parse_args() -> argparse.Namespace:
@@ -111,13 +104,20 @@ def parse_args() -> argparse.Namespace:
     # General
     parser.add_argument("--verbose", "-v", action="store_true")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument(
+        "--log-dir", default="logs",
+        help="Directory for log files (default: logs)",
+    )
 
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    setup_logging(args.verbose)
+    configure_logging(
+        log_dir=args.log_dir,
+        log_name="ml_pipeline",
+    )
     logger = logging.getLogger(__name__)
 
     np.random.seed(args.seed)
@@ -128,7 +128,7 @@ def main() -> int:
     # ---------------------------------------------------------------
     # Phase 1: Load data
     # ---------------------------------------------------------------
-    logger.info("Phase 1: Loading data")
+    log_phase(logger, 1, "Loading data")
 
     if args.synthetic:
         from data_loader import generate_synthetic_dataset
@@ -170,10 +170,19 @@ def main() -> int:
         scores.max(),
     )
 
+    log_config_summary(
+        logger,
+        data_source="synthetic" if args.synthetic else args.scores,
+        molecules=len(mols),
+        score_range=f"[{scores.min():.2f}, {scores.max():.2f}]",
+        cv_folds=args.folds,
+        output_dir=args.output_dir,
+    )
+
     # ---------------------------------------------------------------
     # Phase 2: Generate fingerprints
     # ---------------------------------------------------------------
-    logger.info("Phase 2: Generating fingerprints")
+    log_phase(logger, 2, "Generating fingerprints")
     from fingerprints import generate_all_fingerprints
 
     fp_sets = generate_all_fingerprints(mols)
@@ -182,7 +191,7 @@ def main() -> int:
     # Phase 3: Exploratory Data Analysis
     # ---------------------------------------------------------------
     if not args.skip_eda:
-        logger.info("Phase 3: Exploratory Data Analysis")
+        log_phase(logger, 3, "Exploratory Data Analysis")
         from eda import run_full_eda
 
         eda_summary = run_full_eda(fp_sets, scores, names, output_dir=plot_dir)
@@ -196,7 +205,7 @@ def main() -> int:
     # Phase 4: Model Training & Comparison
     # ---------------------------------------------------------------
     if not args.skip_training:
-        logger.info("Phase 4: Model Training & Comparison (%d-fold CV)", args.folds)
+        log_phase(logger, 4, f"Model Training & Comparison ({args.folds}-fold CV)")
         from model_training import print_best_models, train_and_compare
 
         results_df = train_and_compare(
@@ -207,7 +216,14 @@ def main() -> int:
         logger.info("Phase 4: Skipped (--skip-training)")
 
     t_end = time.time()
-    logger.info("Pipeline complete in %.1fs", t_end - t_start)
+    log_final_summary(
+        logger,
+        program="ML Scoring Pipeline",
+        wall_time=t_end - t_start,
+        molecules=len(mols),
+        fingerprint_types=len(fp_sets),
+        output_dir=args.output_dir,
+    )
 
     return 0
 
