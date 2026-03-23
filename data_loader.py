@@ -38,13 +38,17 @@ def load_vina_results(csv_path: str) -> pd.DataFrame:
         elif "energy" in lower or "score" in lower:
             col_map[col] = "docking_score"
 
+    # Gets the names from the columns, and renames the ligand one to 'ligand'.
+    # Then takes the 'best_energy_kcal' column, and renames that to 'docking_score'.
+  
     df = df.rename(columns=col_map)
 
     if "ligand" not in df.columns or "docking_score" not in df.columns:
         raise ValueError(
             f"CSV must contain ligand and energy/score columns. Found: {list(df.columns)}"
         )
-
+    # pd.to numeric -> converts any scores to numeric if not already.
+    # Can check default datatype, but it should be a float.
     df["docking_score"] = pd.to_numeric(df["docking_score"], errors="coerce")
     n_before = len(df)
     df = df.dropna(subset=["docking_score"])
@@ -52,7 +56,9 @@ def load_vina_results(csv_path: str) -> pd.DataFrame:
         logger.warning(
             "Dropped %d rows with non-numeric docking scores", n_before - len(df)
         )
-
+    # Dropping na rows (if values not able to convert to float, then replace with NA.
+    # These will be skipped. And logged the output.
+  
     logger.info("Loaded %d docking results from %s", len(df), csv_path)
     return df
 
@@ -62,6 +68,10 @@ def load_molecules_from_sdf(sdf_path: str) -> dict:
     Load molecules from an SDF file.
     Returns dict mapping molecule name -> RDKit Mol object.
     """
+
+    # This might not be helpful. It is loading it from sdf, whereas the molecules are in pdbqt.
+    # Can that be loaded? Don't know yet.
+    # 
     supplier = Chem.SDMolSupplier(sdf_path, removeHs=True)
     mols = {}
     for mol in supplier:
